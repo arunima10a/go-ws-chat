@@ -83,7 +83,7 @@
         </div>
     </div>
 
-    <!-- ROOM MODAL (Moved outside for better layering) -->
+  
     <div id="room-modal">
         <div class="auth-card">
             <h3 id="modal-title">Join Room</h3>
@@ -226,7 +226,7 @@
         function handleRoomJoined(roomName) {
             currentRoom = roomName;
             document.getElementById("currentRoomName").innerText = roomName;
-            document.getElementById("log").innerHTML = ""; // Clear log ONLY on confirmation
+            document.getElementById("log").innerHTML = ""; 
             document.getElementById("msgInput").placeholder = `Message #${roomName}`;
 
             console.log("Confirmed joined room:", roomName);
@@ -234,7 +234,7 @@
     document.getElementById("currentRoomName").innerText = roomName;
     
     const logDiv = document.getElementById("log");
-    logDiv.innerHTML = ""; // Clear log
+    logDiv.innerHTML = ""; 
     
     appendMsg({from: "System", message: `Joined room: ${roomName}`, system: true});
 
@@ -283,7 +283,6 @@
                 div.className = "msg-container msg-system";
                 div.innerText = payload.message;
             } else {
-                // Fix for possible case sensitivity issues
                 const isMe = payload.from.toLowerCase() === myUsername.toLowerCase();
                 div.className = `msg-container ${isMe ? 'msg-me' : 'msg-other'}`;
                 div.innerHTML = `<div class="msg-author">${payload.from}</div><div>${payload.message}</div>`;
