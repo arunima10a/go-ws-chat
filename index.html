@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go-WS Secure Chat</title>
+    <style>
+        :root {
+            --primary: #5865F2;
+            --bg-dark: #36393f;
+            --bg-light: #f4f4f9;
+            --sidebar: #2f3136;
+            --text-main: #ffffff;
+            --text-muted: #b9bbbe;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: var(--bg-light); display: flex; height: 100vh; overflow: hidden; }
+
+        /* Auth Screen */
+        #auth-screen { position: fixed; inset: 0; background: var(--bg-dark); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .auth-card { background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); width: 350px; text-align: center; }
+        .auth-card h2 { margin-top: 0; color: #333; }
+        .auth-card input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        
+        .auth-btn { width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; transition: 0.3s; }
+        .login-btn { background: var(--primary); color: white; }
+        .signup-btn { background: #43b581; color: white; }
+
+        /* Main Chat Layout */
+        #chat-screen { display: none; width: 100%; height: 100%; flex-direction: row; }
+        
+        /* Sidebar */
+        .sidebar { width: 260px; background: var(--sidebar); color: var(--text-muted); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid #222; color: white; font-weight: bold; }
+        .sidebar-section { padding: 15px; flex-grow: 1; overflow-y: auto; }
+        .sidebar-section h4 { text-transform: uppercase; font-size: 11px; margin-bottom: 10px; color: var(--text-muted); letter-spacing: 1px; }
+
+        .room-item, .user-item { padding: 8px 10px; border-radius: 4px; cursor: pointer; transition: 0.2s; margin-bottom: 2px; list-style: none; }
+        .room-item:hover, .user-item:hover { background: #4f545c; color: white; }
+        .active-room { background: #4f545c !important; color: white !important; }
+
+        /* Actions */
+        .btn-action { background: #40444b; color: white; border: none; padding: 8px; width: 100%; border-radius: 4px; cursor: pointer; margin-bottom: 5px; font-size: 13px; text-align: left; }
+        .btn-action:hover { background: #4f545c; }
+
+        /* Chat Area */
+        .chat-main { flex-grow: 1; display: flex; flex-direction: column; background: var(--bg-dark); }
+        .chat-header { padding: 15px 25px; background: var(--bg-dark); border-bottom: 1px solid #222; color: white; display: flex; justify-content: space-between; align-items: center; }
+        
+        #log { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+        
+        /* Message Bubbles */
+        .msg-container { max-width: 75%; padding: 10px 15px; border-radius: 15px; font-size: 14px; line-height: 1.4; }
+        .msg-other { align-self: flex-start; background: #40444b; color: white; border-bottom-left-radius: 2px; }
+        .msg-me { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 2px; }
+        .msg-author { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; font-weight: bold; }
+        .msg-system { align-self: center; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-size: 12px; border-radius: 5px; padding: 5px 15px; }
+
+        /* Input Area */
+        .input-area { padding: 20px; background: var(--bg-dark); }
+        .input-wrapper { background: #40444b; border-radius: 8px; padding: 5px 15px; display: flex; align-items: center; }
+        #msgInput { background: transparent; border: none; color: white; flex-grow: 1; outline: none; padding: 10px 5px; font-size: 15px; }
+        #typing-status { color: var(--text-muted); font-size: 12px; height: 18px; padding-left: 5px; }
+
+        /* Modal */
+        #room-modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); z-index: 2000; align-items: center; justify-content: center; }
+
+        .send-btn { background: transparent; border: none; color: var(--primary); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 5px; transition: transform 0.2s, color 0.2s; }
+        .send-btn:hover { color: #fff; transform: scale(1.1); }
+    </style>
+</head>
+
+<body>
+
+    <div id="auth-screen">
+        <div class="auth-card">
+            <h2>Welcome Back</h2>
+            <input type="text" id="usernameInput" placeholder="Username">
+            <input type="password" id="passwordInput" placeholder="Password">
+            <button class="auth-btn login-btn" onclick="auth('login')">Login</button>
+            <button class="auth-btn signup-btn" onclick="auth('signup')">Sign Up</button>
+        </div>
+    </div>
+
+    <!-- ROOM MODAL (Moved outside for better layering) -->
+    <div id="room-modal">
+        <div class="auth-card">
+            <h3 id="modal-title">Join Room</h3>
+            <input type="text" id="modalRoomInput" placeholder="Room Name">
+            <input type="password" id="modalPassInput" placeholder="Password (if any)">
+            <button class="auth-btn login-btn" id="modalActionBtn" onclick="submitRoomAction()">Confirm</button>
+            <button class="auth-btn" style="background:#f04747; color:white" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+    <div id="chat-screen">
+        <div class="sidebar">
+            <div class="sidebar-header">Go-WS Chat</div>
+            <div class="sidebar-section">
+                <h4>Actions</h4>
+                <button class="btn-action" onclick="showModal('create')">+ Create New Room</button>
+                <button class="btn-action" onclick="showModal('join')">→ Join Private Room</button>
+
+                <br>
+                <h4>Rooms</h4>
+                <ul id="roomList" style="padding:0; margin:0">
+                    <li class="room-item active-room" data-name="general" onclick="switchRoom('general')"># general</li>
+                </ul>
+                <br>
+                <h4>Online Users</h4>
+                <ul id="users" style="padding:0; margin:0"></ul>
+            </div>
+        </div>
+
+        <div class="chat-main">
+            <div class="chat-header">
+                <div># <span id="currentRoomName">general</span></div>
+                <div style="display:flex; gap:10px">
+                    <span id="myUsernameDisplay" style="color:var(--text-muted); font-size:14px; align-self:center"></span>
+                    <button class="auth-btn" style="padding:5px 10px; font-size:12px; margin:0; background:#f04747; color:white" onclick="logout()">Logout</button>
+                </div>
+            </div>
+
+            <div id="log"></div>
+
+            <div class="input-area">
+                <div id="typing-status"></div>
+                <div class="input-wrapper">
+                    <input type="text" id="msgInput" placeholder="Message #general" onkeydown="if(event.key==='Enter') sendMessage()">
+                    <button class="send-btn" onclick="sendMessage()">
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let typingTimeout;
+        let myUsername = "";
+        let currentRoom = "general";
+        let isCurrentlyTyping = false;
+        let currentAction = "";
+
+        async function auth(type) {
+            const u = document.getElementById("usernameInput").value;
+            const p = document.getElementById("passwordInput").value;
+            if (!u || !p) return alert("Fields required");
+
+            const params = new URLSearchParams();
+            params.append("username", u);
+            params.append("password", p);
+
+            try {
+                const resp = await fetch(`/${type}`, {
+                    method: "POST",
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString()
+                });
+                const text = await resp.text();
+
+                if (resp.ok) {
+                    if (type === 'signup') {
+                        alert(text);
+                    } else {
+                        myUsername = u;
+                        document.getElementById("myUsernameDisplay").innerText = u;
+                        localStorage.setItem("chat_token", text);
+                        showChat();
+                    }
+                } else {
+                    alert(text);
+                }
+            } catch (e) { alert("Server error: " + e.message); }
+        }
+
+        function showChat() {
+            document.getElementById("auth-screen").style.display = "none";
+            document.getElementById("chat-screen").style.display = "flex";
+            connectWS(localStorage.getItem("chat_token"));
+        }
+
+        function connectWS(token) {
+            socket = new WebSocket(`ws://${window.location.host}/ws?token=${token}`);
+
+            socket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                switch (data.type) {
+                    case "send_message": appendMsg(data.payload); break;
+                    case "user_list": updateUsers(data.payload); break;
+                    case "typing": handleTyping(data.payload); break;
+                    case "room_joined": handleRoomJoined(data.payload); break;
+                    case "error": alert("Error: " + data.payload); break;
+                    case "system": appendMsg({ from: "System", message: data.payload, system: true }); break;
+                }
+            };
+            setupTyping();
+        }
+
+        function showModal(type) {
+            currentAction = type;
+            document.getElementById("modal-title").innerText = type === 'create' ? "Create New Room" : "Join Existing Room";
+            document.getElementById("room-modal").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("room-modal").style.display = "none";
+            document.getElementById("modalRoomInput").value = "";
+            document.getElementById("modalPassInput").value = "";
+        }
+
+        function submitRoomAction() {
+            const name = document.getElementById("modalRoomInput").value;
+            const pass = document.getElementById("modalPassInput").value;
+            if (!name) return alert("Room name required");
+
+            socket.send(JSON.stringify({
+                type: currentAction === 'create' ? "create_room" : "join_room",
+                payload: { new_room: name, password: pass }
+            }));
+            closeModal();
+        }
+
+        function handleRoomJoined(roomName) {
+            currentRoom = roomName;
+            document.getElementById("currentRoomName").innerText = roomName;
+            document.getElementById("log").innerHTML = ""; // Clear log ONLY on confirmation
+            document.getElementById("msgInput").placeholder = `Message #${roomName}`;
+
+            console.log("Confirmed joined room:", roomName);
+    currentRoom = roomName;
+    document.getElementById("currentRoomName").innerText = roomName;
+    
+    const logDiv = document.getElementById("log");
+    logDiv.innerHTML = ""; // Clear log
+    
+    appendMsg({from: "System", message: `Joined room: ${roomName}`, system: true});
+
+            const list = document.getElementById("roomList");
+            let exists = false;
+            list.querySelectorAll('.room-item').forEach(li => {
+                li.classList.remove('active-room');
+                if (li.getAttribute('data-name') === roomName) {
+                    li.classList.add('active-room');
+                    exists = true;
+                }
+            });
+
+            if (!exists) {
+                const li = document.createElement("li");
+                li.className = "room-item active-room";
+                li.setAttribute('data-name', roomName);
+                li.innerText = "# " + roomName;
+                li.onclick = () => switchRoom(roomName);
+                list.appendChild(li);
+            }
+        }
+
+        function switchRoom(roomName) {
+            if (roomName === currentRoom) return;
+            const pass = (roomName === "general") ? "" : prompt(`Enter password for #${roomName}:`);
+            socket.send(JSON.stringify({
+                type: "join_room",
+                payload: { new_room: roomName, password: pass || "" }
+            }));
+        }
+
+        function sendMessage() {
+            const inp = document.getElementById("msgInput");
+            if (!inp.value) return;
+            socket.send(JSON.stringify({ type: "send_message", payload: { message: inp.value } }));
+            inp.value = "";
+            stopTyping();
+        }
+
+        function appendMsg(payload) {
+            const log = document.getElementById("log");
+            const div = document.createElement("div");
+
+            if (payload.system) {
+                div.className = "msg-container msg-system";
+                div.innerText = payload.message;
+            } else {
+                // Fix for possible case sensitivity issues
+                const isMe = payload.from.toLowerCase() === myUsername.toLowerCase();
+                div.className = `msg-container ${isMe ? 'msg-me' : 'msg-other'}`;
+                div.innerHTML = `<div class="msg-author">${payload.from}</div><div>${payload.message}</div>`;
+            }
+
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function setupTyping() {
+            document.getElementById("msgInput").oninput = () => {
+                if (!isCurrentlyTyping && socket) {
+                    isCurrentlyTyping = true;
+                    socket.send(JSON.stringify({ type: "typing", payload: { isTyping: true } }));
+                }
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(stopTyping, 2000);
+            };
+        }
+
+        function stopTyping() {
+            if (isCurrentlyTyping && socket) {
+                isCurrentlyTyping = false;
+                socket.send(JSON.stringify({ type: "typing", payload: { isTyping: false } }));
+            }
+        }
+
+        function handleTyping(payload) {
+            const s = document.getElementById("typing-status");
+            s.innerText = (payload.isTyping && payload.from.toLowerCase() !== myUsername.toLowerCase()) ? `${payload.from} is typing...` : "";
+        }
+
+        function updateUsers(users) {
+            const list = document.getElementById("users");
+            list.innerHTML = users.map(u => `<li class="user-item">● ${u}</li>`).join("");
+        }
+
+        function logout() { localStorage.clear(); location.reload(); }
+    </script>
+</body>
+</html>
